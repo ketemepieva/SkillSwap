@@ -1,0 +1,20 @@
+{
+  "name": "skillswap",
+  "version": "1.0.0",
+  "description": "Plateforme d'échange de compétences SkillSwap (frontend + backend).",
+  "private": true,
+  "scripts": {
+    "dev:backend": "npm --prefix backend run dev",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "build:frontend": "npm --prefix frontend run build",
+    "start:backend": "npm --prefix backend run start",
+    "lint:frontend": "npm --prefix frontend run lint"
+  },
+  "keywords": [
+    "skillswap",
+    "react",
+    "express",
+    "sqlite"
+  ],
+  "license": "MIT"
+}

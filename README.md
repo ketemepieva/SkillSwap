@@ -6,8 +6,10 @@ L'objectif est de connecter des profils complementaires pour apprendre, transmet
 ## Fonctionnalites principales
 
 - Authentification complete (inscription, connexion, session utilisateur).
-- Profil utilisateur enrichi (avatar, bio, niveau, localisation, badge).
-- Messagerie et notifications.
+- Profil utilisateur enrichi (avatar, bio, niveau, localisation, badge, avis de tutorat).
+- Messagerie en vue unique (liste des conversations + fil de discussion cote a cote, rafraichissement automatique du fil ouvert).
+- Notifications avec badge numerote dans la navigation et signal sonore a l'arrivee de nouvelles notifications.
+- Sessions de tutorat initiees depuis le chat : demande -> acceptation -> duree (jours/semaines/mois) -> rappels d'echeance -> cloture automatique -> evaluation du tuteur (note + commentaire visibles sur son profil).
 - Echanges de competences (demandes, suivi, statuts).
 - Feed communautaire avec priorisation visuelle des niveaux (Expert / Intermediaire / Debutant).
 - Recherche dynamique dans le feed:
@@ -64,6 +66,8 @@ Variables backend importantes:
 - `PORT` (ex: 5000)
 - `JWT_SECRET`
 - `SQLITE_PATH` (optionnel)
+- `TUTORING_REMINDERS` (optionnel, delais de rappel de fin de session en minutes, ex: `10080,1440,60`)
+- `TUTORING_SWEEP_INTERVAL_MS` (optionnel, frequence du planificateur de tutorat)
 
 Variables frontend importantes:
 

@@ -1,18 +1,29 @@
 import { useState } from "react";
+import { Link, useLocation } from "react-router-dom";
 import { AuthHeroIllustration } from "../AuthHeroIllustration.jsx";
 import { Logo, LogoLockup } from "../components/Logo.jsx";
 import { ThemeToggle } from "../components/ThemeToggle.jsx";
 import { useAuth } from "../hooks/useAuth.js";
 
-export function AuthPage() {
+export function AuthPage({ initialMode = "login" }) {
   const { login, register } = useAuth();
+  const location = useLocation();
   const [authForm, setAuthForm] = useState({
     nom: "",
     email: "",
     password: "",
-    mode: "register",
+    mode: initialMode,
   });
   const [message, setMessage] = useState("");
+
+  // Resynchronise le mode quand la route change (pattern « adjust state during render »)
+  const routeKey = `${initialMode}|${location.pathname}`;
+  const [lastRouteKey, setLastRouteKey] = useState(routeKey);
+  if (routeKey !== lastRouteKey) {
+    setLastRouteKey(routeKey);
+    setAuthForm((f) => ({ ...f, mode: initialMode }));
+    setMessage("");
+  }
 
   const modeRegister = authForm.mode === "register";
 
@@ -117,15 +128,15 @@ export function AuthPage() {
               <button className="btn btn-primary" type="submit">
                 {modeRegister ? "Créer mon compte" : "Se connecter"}
               </button>
-              <button
-                type="button"
-                className="btn btn-ghost-light"
-                onClick={() =>
-                  setAuthForm((f) => ({ ...f, mode: f.mode === "register" ? "login" : "register" }))
-                }
-              >
-                {modeRegister ? "Déjà inscrit ? Se connecter" : "Pas encore de compte ? S'inscrire"}
-              </button>
+              {modeRegister ? (
+                <Link to="/login" state={location.state} className="btn btn-ghost-light text-center no-underline">
+                  Déjà inscrit ? Se connecter
+                </Link>
+              ) : (
+                <Link to="/inscription" state={location.state} className="btn btn-ghost-light text-center no-underline">
+                  Pas encore de compte ? S&apos;inscrire
+                </Link>
+              )}
             </div>
           </form>
           {message ? <p className="message">{message}</p> : null}

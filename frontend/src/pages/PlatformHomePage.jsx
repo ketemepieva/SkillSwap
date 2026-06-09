@@ -3,6 +3,8 @@ import { Link } from "react-router-dom";
 import { apiFetch } from "../api/client.js";
 import { Avatar } from "../components/Avatar.jsx";
 import { useAuth } from "../hooks/useAuth.js";
+import { fetchAvailableExchanges } from "../services/exchanges.js";
+import { compareMembersByLevel, levelMeta, profileLevel } from "../utils/profileLevel.js";
 
 function ChipList({ label, skills, accentClass, onCategoryClick }) {
   const list = Array.isArray(skills) ? skills : [];
@@ -45,73 +47,6 @@ function ChipList({ label, skills, accentClass, onCategoryClick }) {
 }
 
 const PAGE_LIMIT = 12;
-const LEVEL_ORDER = { expert: 0, intermediate: 1, beginner: 2 };
-
-function levelFromCredibility(scoreRaw) {
-  const score = Number(scoreRaw || 0);
-  // Palier simple et lisible, ajustable plus tard via backend si besoin.
-  if (score >= 4) return "expert";
-  if (score >= 2) return "intermediate";
-  return "beginner";
-}
-
-function normalizedLevel(rawLevel) {
-  const v = String(rawLevel || "")
-    .trim()
-    .toLowerCase();
-  if (["expert"].includes(v)) return "expert";
-  if (["intermediaire", "intermédiaire", "intermediate"].includes(v)) return "intermediate";
-  if (["debutant", "débutant", "beginner"].includes(v)) return "beginner";
-  return null;
-}
-
-function profileLevel(profile) {
-  return normalizedLevel(profile?.expertise_level) || levelFromCredibility(profile?.credibility_score);
-}
-
-function levelMeta(level) {
-  if (level === "expert") {
-    return {
-      label: "Expert",
-      icon: "●",
-      badgeClass:
-        "border-amber-200/55 bg-[color-mix(in_srgb,#f59e0b_10%,transparent)] text-amber-700 dark:text-amber-200",
-      cardClass: "border-[var(--dash-card-border)]",
-      ringClass: "",
-    };
-  }
-  if (level === "intermediate") {
-    return {
-      label: "Intermédiaire",
-      icon: "●",
-      badgeClass:
-        "border-sky-200/55 bg-[color-mix(in_srgb,#0ea5e9_10%,transparent)] text-sky-700 dark:text-sky-200",
-      cardClass: "border-[var(--dash-card-border)]",
-      ringClass: "",
-    };
-  }
-  return {
-    label: "Débutant",
-    icon: "●",
-    badgeClass:
-      "border-[var(--dash-card-border)] bg-[color-mix(in_srgb,var(--grid-input-bg)_88%,transparent)] text-[var(--text-muted)]",
-    cardClass: "border-[var(--dash-card-border)]",
-    ringClass: "",
-  };
-}
-
-function compareMembers(a, b) {
-  const aLevel = profileLevel(a?.profile);
-  const bLevel = profileLevel(b?.profile);
-  const byLevel = LEVEL_ORDER[aLevel] - LEVEL_ORDER[bLevel];
-  if (byLevel !== 0) return byLevel;
-
-  const aScore = Number(a?.profile?.credibility_score || 0);
-  const bScore = Number(b?.profile?.credibility_score || 0);
-  if (aScore !== bScore) return bScore - aScore;
-
-  return Number(b?.profile?.id || 0) - Number(a?.profile?.id || 0);
-}
 
 export function PlatformHomePage() {
   const { token } = useAuth();
@@ -127,10 +62,15 @@ export function PlatformHomePage() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(false);
   const [feedback, setFeedback] = useState("");
+  const [suggestions, setSuggestions] = useState([]);
 
   const sortedMembers = useMemo(() => {
-    return [...members].sort(compareMembers);
+    return [...members].sort(compareMembersByLevel);
   }, [members]);
+
+  const featuredExperts = useMemo(() => {
+    return sortedMembers.filter((e) => profileLevel(e?.profile) === "expert").slice(0, 4);
+  }, [sortedMembers]);
 
   const visibleMembers = useMemo(() => {
     if (levelFilter === "all") return sortedMembers;
@@ -160,6 +100,16 @@ export function PlatformHomePage() {
         }
       }
     })();
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetchAvailableExchanges({ token }).then((rows) => {
+      if (!cancelled) setSuggestions(rows.slice(0, 3));
+    });
     return () => {
       cancelled = true;
     };
@@ -228,17 +178,24 @@ export function PlatformHomePage() {
   return (
     <div className="flex w-full min-w-0 flex-col gap-8 md:gap-10">
       <header className="min-w-0">
-        <h1 className="logo-text m-0 text-xl font-bold tracking-tight text-[var(--text-main)] sm:text-2xl md:text-3xl">
-          Accueil
+        <p className="m-0 text-xs font-bold uppercase tracking-wide text-[var(--accent)]">Découverte</p>
+        <h1 className="logo-text m-0 mt-1 text-xl font-bold tracking-tight text-[var(--text-main)] sm:text-2xl md:text-3xl">
+          Accueil communauté
         </h1>
         <p className="mb-0 mt-2 max-w-prose text-sm leading-relaxed text-[var(--text-muted)] sm:text-base">
-          Découvrez les profils et leurs compétences. Les experts sont valorisés en premier, tout en gardant de la
-          visibilité aux membres débutants.
+          Parcourez les profils, recherchez des compétences et trouvez des échanges. Votre espace personnel est dans{" "}
+          <Link to="/app/dashboard" className="font-semibold text-[var(--accent)] underline underline-offset-2 hover:no-underline">
+            Mon espace
+          </Link>
+          .
         </p>
         <div className="mt-5 grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(180px,220px)_minmax(180px,220px)_auto] md:items-center">
           <label className="flex min-w-0 items-center gap-2 rounded-xl border border-[var(--dash-card-border)] bg-[color-mix(in_srgb,var(--grid-input-bg)_90%,transparent)] px-3 py-2">
-            <span aria-hidden className="text-sm text-[var(--text-muted)]">
-              🔎
+            <span aria-hidden className="inline-flex flex-none items-center text-[var(--text-muted)]">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="11" cy="11" r="7" />
+                <path d="m20 20-3.5-3.5" strokeLinecap="round" />
+              </svg>
             </span>
             <input
               className="w-full min-w-0 bg-transparent text-sm text-[var(--text-main)] outline-none placeholder:text-[var(--text-muted)]"
@@ -313,6 +270,60 @@ export function PlatformHomePage() {
         </p>
       ) : null}
 
+      {featuredExperts.length > 0 ? (
+        <section className="dash-section">
+          <h2 className="logo-text m-0 text-lg font-semibold text-[var(--text-main)]">Experts mis en avant</h2>
+          <p className="mb-4 mt-1 text-sm text-[var(--text-muted)]">Profils à forte crédibilité sur la plateforme.</p>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {featuredExperts.map((entry) => {
+              const p = entry.profile;
+              const meta = levelMeta("expert");
+              return (
+                <Link
+                  key={p.id}
+                  to={`/app/profile/${encodeURIComponent(String(p.id))}`}
+                  className={`flex flex-col gap-2 rounded-xl border-2 p-4 no-underline transition hover:shadow-[var(--shadow-soft)] ${meta.cardClass}`}
+                >
+                  <Avatar nom={p.nom} avatarUrl={p.avatar_url} size="md" />
+                  <p className="m-0 truncate text-sm font-bold text-[var(--text-main)]">{p.nom}</p>
+                  <span className={`w-fit rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase ${meta.badgeClass}`}>
+                    {p.badge_label || meta.label}
+                  </span>
+                </Link>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
+
+      {suggestions.length > 0 ? (
+        <section className="dash-section border-2 border-amber-500/15 bg-amber-500/5">
+          <h2 className="logo-text m-0 text-lg font-semibold text-[var(--text-main)]">Suggestions d&apos;échanges</h2>
+          <p className="mb-4 mt-1 text-sm text-[var(--text-muted)]">
+            Idées de mise en relation — gérez vos demandes dans{" "}
+            <Link to="/app/echanges" className="font-semibold text-[var(--accent)] hover:no-underline">
+              Échanges
+            </Link>
+            .
+          </p>
+          <ul className="m-0 grid list-none gap-3 p-0 sm:grid-cols-3">
+            {suggestions.map((s) => (
+              <li key={s.id} className="rounded-xl border border-amber-500/20 bg-[var(--dash-card-bg)] p-3 text-sm">
+                <p className="m-0 font-semibold text-[var(--text-main)]">{s.name}</p>
+                <p className="mb-0 mt-1 text-xs text-[var(--text-muted)]">
+                  Propose <strong>{s.offeredSkill}</strong> · Cherche <strong>{s.wantedSkill}</strong>
+                </p>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      <section className="dash-section">
+        <h2 className="logo-text m-0 text-lg font-semibold text-[var(--text-main)]">Tous les profils</h2>
+        <p className="mb-4 mt-1 text-sm text-[var(--text-muted)]">Filtrés par recherche, catégorie et niveau.</p>
+      </section>
+
       {loading ? (
         <p className="text-sm text-[var(--text-muted)]">Chargement du fil…</p>
       ) : visibleMembers.length === 0 ? (
@@ -333,7 +344,7 @@ export function PlatformHomePage() {
               return (
                 <article
                   key={id}
-                  className={`dash-section flex min-h-0 flex-col gap-4 !p-5 sm:!p-[1.35rem] ${meta.cardClass} ${meta.ringClass}`}
+                  className={`dash-section flex min-h-0 flex-col gap-4 !p-5 sm:!p-[1.35rem] ${meta.cardClass}`}
                 >
                   <div className="flex min-w-0 items-start gap-3">
                     <Avatar nom={p.nom} avatarUrl={p.avatar_url} size="lg" />

@@ -1,10 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { apiFetch } from "../api/client.js";
 import { Avatar } from "../components/Avatar.jsx";
 import { useAuth } from "../hooks/useAuth.js";
-import { formatRelativeTimeFr } from "../utils/time.js";
-import { getNotificationLocation, getNotificationMessage } from "./notifications/types.js";
+import { levelMeta, profileLevel } from "../utils/profileLevel.js";
 
 const DEFAULT_CATEGORY = "Divers";
 const DEFAULT_LEVEL = "Debutant";
@@ -12,15 +11,14 @@ const DEFAULT_LEVEL = "Debutant";
 const SKILL_GRID =
   "grid grid-cols-1 gap-3 sm:gap-4 md:grid-cols-2 xl:grid-cols-3 w-full min-w-0 [&>*]:min-w-0";
 
-function SkillCard({ label, skillId, onRemove }) {
+function SkillCard({ label, level, skillId, onRemove }) {
   return (
-    <article className="flex flex-col gap-4 rounded-xl border border-[var(--dash-card-border)] bg-[color-mix(in_srgb,var(--grid-input-bg)_92%,transparent)] p-4">
-      <p className="m-0 flex-1 break-words text-sm font-medium leading-snug text-[var(--text-main)] sm:text-[0.95rem]">
-        {label}
-      </p>
+    <article className="flex flex-col gap-3 rounded-xl border border-[var(--dash-card-border)] bg-[color-mix(in_srgb,var(--grid-input-bg)_92%,transparent)] p-4">
+      <p className="m-0 flex-1 break-words text-sm font-medium leading-snug text-[var(--text-main)]">{label}</p>
+      {level ? <p className="m-0 text-xs text-[var(--text-muted)]">Niveau : {level}</p> : null}
       <button
         type="button"
-        className="btn btn-ghost-light mt-auto w-full min-h-10 text-sm shrink-0 sm:min-h-0"
+        className="btn btn-ghost-light mt-auto w-full min-h-10 text-sm shrink-0"
         onClick={() => void onRemove(skillId)}
       >
         Retirer
@@ -29,76 +27,69 @@ function SkillCard({ label, skillId, onRemove }) {
   );
 }
 
-function SectionHeader({ title, description, actionLabel, onAction }) {
+function StatCard({ label, value, hint }) {
   return (
-    <div className="mb-5 flex w-full min-w-0 flex-col gap-3 sm:mb-6 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
-      <div className="min-w-0 flex-1">
-        <h3 className="logo-text m-0 text-lg font-semibold tracking-tight text-[var(--text-main)]">{title}</h3>
-        {description ? (
-          <p className="mb-0 mt-1 max-w-prose text-sm leading-relaxed text-[var(--text-muted)]">{description}</p>
-        ) : null}
-      </div>
-      {actionLabel ? (
-        <button
-          type="button"
-          className="btn btn-primary box-border w-full min-h-11 shrink-0 sm:mt-0 sm:w-auto sm:min-w-0"
-          onClick={onAction}
-        >
-          {actionLabel}
-        </button>
-      ) : null}
+    <div className="rounded-xl border border-[var(--dash-card-border)] bg-[color-mix(in_srgb,var(--grid-input-bg)_90%,transparent)] px-4 py-3">
+      <p className="m-0 text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]">{label}</p>
+      <p className="m-0 mt-1 text-xl font-bold tabular-nums text-[var(--text-main)]">{value}</p>
+      {hint ? <p className="mb-0 mt-1 text-xs text-[var(--text-muted)]">{hint}</p> : null}
     </div>
   );
 }
 
-const PREVIEW_NOTIF = 6;
-const PREVIEW_MSG = 5;
-
 /**
- * Tableau de bord personnel uniquement — pas de fil communautaire ici.
+ * Mon espace — profil personnel uniquement (compétences, niveau, badges, stats).
  */
 export function DashboardPage() {
   const { token, user } = useAuth();
   const [skills, setSkills] = useState([]);
-  const [notifications, setNotifications] = useState([]);
-  const [conversations, setConversations] = useState([]);
-  const [loadingSkills, setLoadingSkills] = useState(true);
-  const [loadingFeeds, setLoadingFeeds] = useState(true);
+  const [profile, setProfile] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [feedback, setFeedback] = useState("");
   const [modal, setModal] = useState(null);
   const [newName, setNewName] = useState("");
 
-  const loadAll = useCallback(async () => {
-    setLoadingSkills(true);
-    setLoadingFeeds(true);
+  const load = useCallback(async () => {
+    setLoading(true);
     setFeedback("");
     try {
-      const [skillData, notifData, convData] = await Promise.all([
+      const [skillData, profileData] = await Promise.all([
         apiFetch("/api/skills/my-skills", { token }),
-        apiFetch("/api/notifications", { token }),
-        apiFetch("/api/messages/conversations", { token }),
+        apiFetch("/api/profile/me", { token }),
       ]);
       setSkills(Array.isArray(skillData) ? skillData : []);
-      setNotifications(Array.isArray(notifData) ? notifData.slice(0, PREVIEW_NOTIF) : []);
-      setConversations(Array.isArray(convData) ? convData.slice(0, PREVIEW_MSG) : []);
+      setProfile(profileData && typeof profileData === "object" ? profileData : null);
     } catch (e) {
-      setFeedback(e.message || "Certaines données n’ont pas pu être chargées.");
+      setFeedback(e.message || "Impossible de charger votre espace.");
       setSkills([]);
-      setNotifications([]);
-      setConversations([]);
+      setProfile(null);
     } finally {
-      setLoadingSkills(false);
-      setLoadingFeeds(false);
+      setLoading(false);
     }
   }, [token]);
 
   useEffect(() => {
-    const tid = window.setTimeout(() => void loadAll(), 0);
+    const tid = window.setTimeout(() => void load(), 0);
     return () => clearTimeout(tid);
-  }, [loadAll]);
+  }, [load]);
 
   const offered = skills.filter((s) => Number(s.is_offer) === 1);
   const sought = skills.filter((s) => Number(s.is_offer) === 0);
+
+  const level = profileLevel(profile ?? user);
+  const meta = levelMeta(level);
+  const displayBadge = profile?.badge_label || user?.badge_label || meta.label;
+
+  const stats = useMemo(
+    () => ({
+      offered: offered.length,
+      sought: sought.length,
+      rating: profile?.average_rating != null ? Number(profile.average_rating).toFixed(1) : "—",
+      reviews: profile?.total_reviews ?? 0,
+      credibility: Number(profile?.credibility_score ?? user?.credibility_score ?? 0).toFixed(1),
+    }),
+    [offered.length, sought.length, profile, user]
+  );
 
   const closeModal = () => {
     setModal(null);
@@ -123,39 +114,36 @@ export function DashboardPage() {
         },
       });
       closeModal();
-      await loadAll();
+      await load();
     } catch (err) {
       setFeedback(err.message || "Erreur à l’ajout.");
     }
   };
 
   const removeSkill = async (skillId) => {
-    if (!window.confirm("Retirer cette entrée du profil ?")) return;
+    if (!window.confirm("Retirer cette compétence ?")) return;
     setFeedback("");
     try {
       await apiFetch(`/api/skills/${skillId}`, { method: "DELETE", token });
-      await loadAll();
+      await load();
     } catch (err) {
       setFeedback(err.message || "Impossible de supprimer.");
     }
   };
 
   return (
-    <div className="flex w-full min-w-0 flex-col gap-10 md:gap-12">
-      <div className="min-w-0">
-        <h1 className="logo-text m-0 text-xl font-bold text-[var(--text-main)] sm:text-2xl md:text-3xl">
-          Tableau de bord
-        </h1>
+    <div className="flex w-full min-w-0 flex-col gap-8 md:gap-10">
+      <header className="min-w-0">
+        <p className="m-0 text-xs font-bold uppercase tracking-wide text-[var(--text-muted)]">Espace personnel</p>
+        <h1 className="logo-text m-0 mt-1 text-xl font-bold text-[var(--text-main)] sm:text-2xl md:text-3xl">Mon espace</h1>
         <p className="mb-0 mt-2 max-w-prose text-sm leading-relaxed text-[var(--text-muted)]">
-          Vue personnelle&nbsp;: vos compétences, alertes récentes et messages. Pour parcourir les autres membres,
-          utilisez&nbsp;
+          Vos compétences, votre progression et votre profil. Pour découvrir la communauté, rendez-vous sur{" "}
           <Link to="/app" className="font-semibold text-[var(--accent)] underline underline-offset-2 hover:no-underline">
             Accueil
           </Link>
           .
         </p>
-        <p className="mb-0 mt-1 text-xs text-[var(--text-muted)]">Connecté : {user?.nom}</p>
-      </div>
+      </header>
 
       {feedback ? (
         <p className="message m-0 rounded-[var(--radius-md)] px-3 py-2" role="status">
@@ -163,158 +151,90 @@ export function DashboardPage() {
         </p>
       ) : null}
 
-      {/* Notifications en premier pour un accès rapide */}
       <section className="dash-section">
-        <div className="mb-5 flex w-full min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="min-w-0">
-            <h3 className="logo-text m-0 text-lg font-semibold tracking-tight text-[var(--text-main)]">Mes notifications</h3>
-            <p className="mb-0 mt-1 text-sm leading-relaxed text-[var(--text-muted)]">
-              Aperçu — cliquez pour ouvrir le profil, l’échange ou la conversation.
-            </p>
+        <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
+          <Avatar nom={user?.nom} avatarUrl={user?.avatar_url ?? profile?.avatar_url} size="xl" />
+          <div className="min-w-0 flex-1">
+            <h2 className="logo-text m-0 text-lg font-semibold text-[var(--text-main)]">{user?.nom}</h2>
+            <p className="mb-0 mt-1 break-all text-sm text-[var(--text-muted)]">{user?.email}</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <span
+                className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold ${meta.badgeClass}`}
+              >
+                <span aria-hidden>{meta.icon}</span>
+                Niveau : {meta.label}
+              </span>
+              {displayBadge ? (
+                <span className="inline-flex items-center rounded-full border border-violet-400/35 bg-violet-500/10 px-3 py-1 text-xs font-semibold text-violet-800 dark:text-violet-200">
+                  Badge : {displayBadge}
+                </span>
+              ) : null}
+            </div>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Link to="/app/profil" className="btn btn-ghost-light min-h-10 text-sm no-underline">
+                Modifier ma présentation
+              </Link>
+              {user?.id != null ? (
+                <Link
+                  to={`/app/profile/${encodeURIComponent(String(user.id))}`}
+                  className="btn btn-ghost-light min-h-10 text-sm no-underline"
+                >
+                  Voir mon profil public
+                </Link>
+              ) : null}
+            </div>
           </div>
-          <Link
-            to="/app/notifications"
-            className="btn btn-ghost-light w-full min-h-11 shrink-0 box-border text-center no-underline sm:w-auto"
-          >
-            Voir tout
-          </Link>
         </div>
-        {loadingFeeds ? (
-          <p className="mb-0 text-sm text-[var(--text-muted)]">Chargement…</p>
-        ) : notifications.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-[var(--dash-card-border)] bg-[color-mix(in_srgb,var(--grid-input-bg)_88%,transparent)] px-4 py-10 text-center">
-            <p className="m-0 text-sm text-[var(--text-muted)]">Aucune notification.</p>
-          </div>
-        ) : (
-          <ul className="m-0 flex w-full min-w-0 list-none flex-col gap-3 p-0">
-            {notifications.map((n) => {
-              const unread = !n.read;
-              return (
-                <li key={n.id} className="min-w-0">
-                  <Link
-                    to={getNotificationLocation(n)}
-                    className={`notification-card flex w-full max-w-full min-w-0 box-border flex-col gap-2 rounded-xl border border-[var(--dash-card-border)] bg-[color-mix(in_srgb,var(--dash-card-bg)_96%,transparent)] px-4 py-3 text-left text-inherit no-underline shadow-[var(--shadow-soft)] transition sm:px-5 sm:py-4 ${
-                      unread ? "ring-1 ring-[var(--accent)]/35" : ""
-                    }`}
-                  >
-                    <div className="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
-                      <div className="flex min-w-0 flex-1 gap-3 sm:items-start">
-                        <Avatar
-                          nom={n.related_user_nom}
-                          avatarUrl={n.related_user_avatar_url}
-                          size="sm"
-                          className="mt-0.5 shrink-0"
-                        />
-                        <p className="m-0 min-w-0 flex-1 break-words text-sm font-semibold text-[var(--text-main)]">
-                          {getNotificationMessage(n)}
-                        </p>
-                      </div>
-                      <span className="shrink-0 text-xs whitespace-nowrap text-[var(--text-muted)] tabular-nums">
-                        {formatRelativeTimeFr(n.created_at)}
-                      </span>
-                    </div>
-                    {unread ? <span className="text-xs font-medium text-[var(--accent)]">Non lu</span> : null}
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-        )}
+
+        <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <StatCard label="Proposées" value={stats.offered} />
+          <StatCard label="Recherchées" value={stats.sought} />
+          <StatCard label="Note moyenne" value={stats.rating} hint={`${stats.reviews} avis`} />
+          <StatCard label="Crédibilité" value={stats.credibility} />
+        </div>
       </section>
 
       <section className="dash-section">
-        <div className="mb-5 flex w-full min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="min-w-0">
-            <h3 className="logo-text m-0 text-lg font-semibold tracking-tight text-[var(--text-main)]">Mes messages récents</h3>
-            <p className="mb-0 mt-1 text-sm leading-relaxed text-[var(--text-muted)]">
-              Accès rapide — la liste complète est dans l’entrée Messages.
-            </p>
+        <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h3 className="logo-text m-0 text-lg font-semibold text-[var(--text-main)]">Mes compétences proposées</h3>
+            <p className="mb-0 mt-1 text-sm text-[var(--text-muted)]">Ce que vous pouvez enseigner aux autres membres.</p>
           </div>
-          <Link
-            to="/app/messages"
-            className="btn btn-ghost-light w-full min-h-11 shrink-0 box-border text-center no-underline sm:w-auto"
-          >
-            Toutes les conversations
-          </Link>
+          <button type="button" className="btn btn-primary min-h-11 w-full sm:w-auto" onClick={() => setModal("offer")}>
+            Ajouter
+          </button>
         </div>
-        {loadingFeeds ? (
-          <p className="mb-0 text-sm text-[var(--text-muted)]">Chargement…</p>
-        ) : conversations.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-[var(--dash-card-border)] bg-[color-mix(in_srgb,var(--grid-input-bg)_88%,transparent)] px-4 py-10 text-center">
-            <p className="m-0 text-sm text-[var(--text-muted)]">Aucune conversation.</p>
-          </div>
-        ) : (
-          <ul className="m-0 flex w-full min-w-0 flex-col gap-3 p-0 [&>li]:min-w-0">
-            {conversations.map((c) => {
-              const peerId = String(c.peer_user_id);
-              const unread = Number(c.unread_count) > 0;
-              return (
-                <li key={peerId}>
-                  <Link
-                    to={`/app/messages/${encodeURIComponent(peerId)}`}
-                    state={{ peerName: c.peer_nom ?? null, peerAvatarUrl: c.peer_avatar_url ?? null }}
-                    className="flex w-full max-w-full min-w-0 box-border flex-col gap-2 rounded-xl border border-[var(--dash-card-border)] bg-[color-mix(in_srgb,var(--grid-input-bg)_90%,transparent)] px-4 py-3 text-left text-inherit no-underline shadow-[var(--shadow-soft)] transition sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-5 sm:py-4"
-                  >
-                    <div className="flex min-w-0 flex-1 items-start gap-3">
-                      <Avatar nom={c.peer_nom} avatarUrl={c.peer_avatar_url} size="sm" className="mt-0.5 shrink-0" />
-                      <div className="min-w-0 flex-1">
-                        <p className="m-0 truncate text-sm font-semibold text-[var(--text-main)]">
-                          {c.peer_nom || `Membre #${peerId}`}
-                        </p>
-                        <p className="mb-0 mt-1 line-clamp-2 text-sm leading-snug text-[var(--text-muted)]">{c.last_body}</p>
-                      </div>
-                    </div>
-                    <div className="flex shrink-0 flex-row items-center justify-between gap-2 sm:flex-col sm:items-end">
-                      <span className="text-xs text-[var(--text-muted)]">{formatRelativeTimeFr(c.last_at)}</span>
-                      {unread ? (
-                        <span className="inline-flex min-h-6 min-w-6 items-center justify-center rounded-full bg-[var(--accent)] px-2 text-[11px] font-bold tabular-nums text-white">
-                          {c.unread_count}
-                        </span>
-                      ) : null}
-                    </div>
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </section>
-
-      <section className="dash-section">
-        <SectionHeader
-          title="Mes compétences proposées"
-          description="Ce que vous enseignez ou proposez aux autres membres."
-          actionLabel="Ajouter une compétence"
-          onAction={() => setModal("offer")}
-        />
-        {loadingSkills ? (
-          <p className="mb-0 text-sm text-[var(--text-muted)]">Chargement…</p>
+        {loading ? (
+          <p className="text-sm text-[var(--text-muted)]">Chargement…</p>
         ) : offered.length === 0 ? (
-          <p className="mb-0 text-sm text-[var(--text-muted)]">Aucune entrée pour le moment.</p>
+          <p className="text-sm text-[var(--text-muted)]">Aucune compétence proposée.</p>
         ) : (
           <div className={SKILL_GRID}>
             {offered.map((s) => (
-              <SkillCard key={s.id} label={s.nom_competence} skillId={s.id} onRemove={removeSkill} />
+              <SkillCard key={s.id} label={s.nom_competence} level={s.niveau} skillId={s.id} onRemove={removeSkill} />
             ))}
           </div>
         )}
       </section>
 
       <section className="dash-section">
-        <SectionHeader
-          title="Mes compétences recherchées"
-          description="Ce que vous aimeriez apprendre via la communauté."
-          actionLabel="Ajouter une compétence recherchée"
-          onAction={() => setModal("seek")}
-        />
-        {loadingSkills ? (
-          <p className="mb-0 text-sm text-[var(--text-muted)]">Chargement…</p>
+        <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h3 className="logo-text m-0 text-lg font-semibold text-[var(--text-main)]">Mes compétences recherchées</h3>
+            <p className="mb-0 mt-1 text-sm text-[var(--text-muted)]">Ce que vous souhaitez apprendre via la communauté.</p>
+          </div>
+          <button type="button" className="btn btn-primary min-h-11 w-full sm:w-auto" onClick={() => setModal("seek")}>
+            Ajouter
+          </button>
+        </div>
+        {loading ? (
+          <p className="text-sm text-[var(--text-muted)]">Chargement…</p>
         ) : sought.length === 0 ? (
-          <p className="mb-0 text-sm text-[var(--text-muted)]">Aucune entrée pour le moment.</p>
+          <p className="text-sm text-[var(--text-muted)]">Aucune compétence recherchée.</p>
         ) : (
           <div className={SKILL_GRID}>
             {sought.map((s) => (
-              <SkillCard key={s.id} label={s.nom_competence} skillId={s.id} onRemove={removeSkill} />
+              <SkillCard key={s.id} label={s.nom_competence} level={s.niveau} skillId={s.id} onRemove={removeSkill} />
             ))}
           </div>
         )}
@@ -329,28 +249,26 @@ export function DashboardPage() {
           <div
             role="dialog"
             aria-modal="true"
-            aria-labelledby="dash-skill-modal-title"
-            className="w-full max-w-md box-border rounded-2xl border border-[var(--dash-card-border)] bg-[var(--dash-card-bg)] p-5 shadow-[var(--shadow-strong)] sm:p-6"
+            className="w-full max-w-md rounded-2xl border border-[var(--dash-card-border)] bg-[var(--dash-card-bg)] p-5 shadow-[var(--shadow-strong)] sm:p-6"
             onClick={(ev) => ev.stopPropagation()}
           >
-            <h4 id="dash-skill-modal-title" className="logo-text m-0 text-base text-[var(--text-main)] sm:text-lg">
-              {modal === "offer" ? "Nouvelle compétence" : "Compétence recherchée"}
+            <h4 className="logo-text m-0 text-base text-[var(--text-main)]">
+              {modal === "offer" ? "Nouvelle compétence proposée" : "Nouvelle compétence recherchée"}
             </h4>
-            <p className="mb-0 mt-2 text-sm text-[var(--text-muted)]">Indiquez un intitulé court (ex. : anglais, couture, Excel).</p>
-            <form className="mt-4 flex w-full min-w-0 flex-col gap-3" onSubmit={submitAdd}>
+            <form className="mt-4 flex flex-col gap-3" onSubmit={submitAdd}>
               <input
-                className="simple-input box-border min-h-11 w-full max-w-full"
+                className="simple-input min-h-11 w-full"
                 autoFocus
                 placeholder="Ex. : Photographie"
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
                 maxLength={120}
               />
-              <div className="flex w-full flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-2">
-                <button type="button" className="btn btn-ghost-light w-full min-h-11 sm:w-auto" onClick={closeModal}>
+              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                <button type="button" className="btn btn-ghost-light min-h-11" onClick={closeModal}>
                   Annuler
                 </button>
-                <button type="submit" className="btn btn-primary w-full min-h-11 sm:w-auto" disabled={!newName.trim()}>
+                <button type="submit" className="btn btn-primary min-h-11" disabled={!newName.trim()}>
                   Enregistrer
                 </button>
               </div>
@@ -361,3 +279,6 @@ export function DashboardPage() {
     </div>
   );
 }
+
+
+

@@ -55,6 +55,13 @@ export function getNotificationLocation(n) {
         ? { pathname: `/app/messages/${encodeURIComponent(peer)}` }
         : { pathname: "/app/messages" };
     }
+    case "system": {
+      // Notifications de tutorat : retour vers le chat avec l'interlocuteur concerné
+      if (typeof n.target_id === "string" && n.target_id.startsWith("tutoring:") && n.related_user_id != null) {
+        return { pathname: `/app/messages/${encodeURIComponent(String(n.related_user_id))}` };
+      }
+      return { pathname: "/app/notifications" };
+    }
     default:
       return { pathname: "/app/notifications" };
   }

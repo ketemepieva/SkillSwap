@@ -740,14 +740,11 @@ h2,
   }
 }
 
-/* Dashboard */
+/* Dashboard — largeur/espacements pilotés par Tailwind sur le nœud
+   (max-w-6xl, px-*, py-*) : ne pas redéfinir padding/max-width ici,
+   sinon ça écrase les utilitaires Tailwind (cascade layers v4). */
 .app-shell {
-  /* Largeur pilotée par Tailwind sur le nœud (.max-w-6xl, etc.) pour éviter les conflits */
-  max-width: none;
-  width: 100%;
   box-sizing: border-box;
-  margin: 0 auto;
-  padding: 0;
   color: var(--text-main);
 }
 

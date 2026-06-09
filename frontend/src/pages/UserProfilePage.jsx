@@ -8,6 +8,7 @@ export function UserProfilePage() {
   const { userId } = useParams();
   const { token, user } = useAuth();
   const [data, setData] = useState(null);
+  const [reviewsData, setReviewsData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [feedback, setFeedback] = useState("");
   const viewSentRef = useRef(false);
@@ -18,11 +19,16 @@ export function UserProfilePage() {
     setLoading(true);
     setFeedback("");
     try {
-      const raw = await apiFetch(`/api/profile/member/${encodeURIComponent(idParam)}`, { token });
+      const [raw, reviews] = await Promise.all([
+        apiFetch(`/api/profile/member/${encodeURIComponent(idParam)}`, { token }),
+        apiFetch(`/api/tutoring/reviews/${encodeURIComponent(idParam)}`, { token }).catch(() => null),
+      ]);
       setData(raw && typeof raw === "object" ? raw : null);
+      setReviewsData(reviews && typeof reviews === "object" ? reviews : null);
     } catch (e) {
       setFeedback(e.message || "Profil introuvable.");
       setData(null);
+      setReviewsData(null);
     } finally {
       setLoading(false);
     }
@@ -144,6 +150,55 @@ export function UserProfilePage() {
                 <p className="mb-0 mt-3 text-sm text-[var(--text-muted)]">Aucune recherche listée.</p>
               )}
             </div>
+          </section>
+
+          <section className="simple-panel">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="m-0 text-sm font-semibold text-[var(--text-main)]">Évaluations de tutorat</h3>
+              {reviewsData?.count ? (
+                <p className="m-0 inline-flex items-center gap-1.5 text-sm">
+                  <span className="text-amber-400" aria-hidden>
+                    ★
+                  </span>
+                  <strong className="tabular-nums text-[var(--text-main)]">
+                    {Number(reviewsData.average ?? 0).toFixed(1)}
+                  </strong>
+                  <span className="text-xs text-[var(--text-muted)]">
+                    ({reviewsData.count} avis)
+                  </span>
+                </p>
+              ) : null}
+            </div>
+            {reviewsData?.reviews?.length ? (
+              <ul className="m-0 mt-3 flex list-none flex-col gap-3 p-0">
+                {reviewsData.reviews.map((r) => (
+                  <li
+                    key={r.id}
+                    className="rounded-xl border border-[var(--dash-card-border)] bg-[var(--section-row-bg)] px-3 py-2.5"
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Avatar nom={r.reviewer_nom} avatarUrl={r.reviewer_avatar_url} size="sm" />
+                      <p className="m-0 min-w-0 flex-1 truncate text-sm font-semibold text-[var(--text-main)]">
+                        {r.reviewer_nom}
+                      </p>
+                      <span className="text-sm text-amber-400" aria-label={`${r.rating} sur 5`}>
+                        {"★".repeat(r.rating)}
+                        <span className="opacity-30">{"★".repeat(5 - r.rating)}</span>
+                      </span>
+                    </div>
+                    {r.comment ? (
+                      <p className="mb-0 mt-2 whitespace-pre-wrap text-sm leading-relaxed text-[var(--text-muted)]">
+                        {r.comment}
+                      </p>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mb-0 mt-3 text-sm text-[var(--text-muted)]">
+                Aucune évaluation de tutorat pour le moment.
+              </p>
+            )}
           </section>
 
           {!mine ? (

@@ -3,11 +3,13 @@ import { Link, useNavigate } from "react-router-dom";
 import { apiFetch } from "../api/client.js";
 import { Avatar } from "../components/Avatar.jsx";
 import { useAuth } from "../hooks/useAuth.js";
+import { useNotifications } from "../hooks/useNotifications.js";
 import { formatRelativeTimeFr } from "../utils/time.js";
 import { getNotificationLocation, getNotificationMessage } from "./notifications/types.js";
 
 export function NotificationsPage() {
   const { token } = useAuth();
+  const { syncUnread } = useNotifications();
   const navigate = useNavigate();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -18,14 +20,16 @@ export function NotificationsPage() {
     setFeedback("");
     try {
       const data = await apiFetch("/api/notifications", { token });
-      setItems(Array.isArray(data) ? data : []);
+      const list = Array.isArray(data) ? data : [];
+      setItems(list);
+      syncUnread(list.filter((n) => !n.read).length);
     } catch (e) {
       setFeedback(e.message || "Impossible de charger les notifications.");
       setItems([]);
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, [token, syncUnread]);
 
   useEffect(() => {
     const tid = window.setTimeout(() => void load(), 0);
@@ -37,7 +41,11 @@ export function NotificationsPage() {
     if (!n.read) {
       try {
         await apiFetch(`/api/notifications/${n.id}/read`, { method: "PATCH", token });
-        setItems((prev) => prev.map((x) => (x.id === n.id ? { ...x, read: 1 } : x)));
+        setItems((prev) => {
+          const next = prev.map((x) => (x.id === n.id ? { ...x, read: 1 } : x));
+          syncUnread(next.filter((x) => !x.read).length);
+          return next;
+        });
       } catch {
         /* navigation même en cas d’échec */
       }
@@ -50,6 +58,7 @@ export function NotificationsPage() {
     try {
       await apiFetch("/api/notifications/read-all", { method: "POST", token });
       setItems((prev) => prev.map((x) => ({ ...x, read: 1 })));
+      syncUnread(0);
     } catch (e) {
       setFeedback(e.message || "Action impossible.");
     }
@@ -64,7 +73,8 @@ export function NotificationsPage() {
               Notifications
             </h2>
             <p className="mb-0 mt-2 max-w-prose text-sm leading-relaxed text-[var(--text-muted)]">
-              Liste verticale : chaque carte est espacée, cliquable, sans débordement horizontal.
+              Activités et alertes uniquement — pas de messagerie ici. Le chat est dans Messages, les demandes dans
+              Échanges.
             </p>
           </div>
           {items.some((n) => !n.read) ? (

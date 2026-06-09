@@ -9,10 +9,10 @@ export function HeroSection({ intent, onOfferClick, onSeekClick }) {
   const createExchange = () => {
     if (!ready) return;
     if (!user) {
-      navigate("/login", { state: { from: "/app", intent: "create-exchange" } });
+      navigate("/login", { state: { from: "/app/dashboard", intent: "create-exchange" } });
       return;
     }
-    navigate("/app");
+    navigate("/app/dashboard");
   };
 
   const scrollAvail = () => {

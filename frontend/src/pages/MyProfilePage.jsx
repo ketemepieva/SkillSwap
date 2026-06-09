@@ -128,7 +128,7 @@ export function MyProfilePage() {
               to="/app/dashboard"
               className="btn btn-ghost-light w-full min-h-11 text-center no-underline sm:w-auto"
             >
-              Gérer mes compétences et alertes
+              Mon espace (compétences)
             </Link>
             {(user?.id ?? detail?.id) != null ? (
               <Link

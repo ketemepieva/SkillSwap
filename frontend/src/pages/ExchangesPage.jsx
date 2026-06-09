@@ -1,26 +1,20 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { apiFetch } from "../api/client.js";
+import { ExchangeRequestCard } from "../components/exchanges/ExchangeRequestCard.jsx";
+import { TutoringHistorySection } from "../components/exchanges/TutoringHistorySection.jsx";
 import { useAuth } from "../hooks/useAuth.js";
-import { formatRelativeTimeFr } from "../utils/time.js";
+import { categorizeExchanges } from "../utils/categorizeExchanges.js";
 
-function statusLabel(s) {
-  switch (String(s || "").toLowerCase()) {
-    case "pending":
-      return "En attente";
-    case "accepted":
-      return "Accepté";
-    case "rejected":
-      return "Refusé";
-    case "completed":
-      return "Terminé";
-    default:
-      return s || "—";
-  }
-}
+const TABS = [
+  { id: "received", label: "Demandes reçues", hint: "À accepter ou refuser" },
+  { id: "sent", label: "Demandes envoyées", hint: "En attente de réponse" },
+  { id: "accepted", label: "Échanges acceptés", hint: "Apprentissages en cours" },
+  { id: "history", label: "Historique", hint: "Terminés et refusés" },
+];
 
 export function ExchangesPage() {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const location = useLocation();
   const highlightId = location.state?.highlightExchangeId != null ? String(location.state.highlightExchangeId) : null;
   const highlightRef = useRef(null);
@@ -28,6 +22,8 @@ export function ExchangesPage() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [feedback, setFeedback] = useState("");
+  const [tab, setTab] = useState("received");
+  const [busyId, setBusyId] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -48,89 +44,166 @@ export function ExchangesPage() {
     return () => clearTimeout(tid);
   }, [load]);
 
+  // Ouvre l'onglet « reçues » quand on arrive via une notification (adjust state during render)
+  const [lastHighlightId, setLastHighlightId] = useState(null);
+  if (highlightId && highlightId !== lastHighlightId) {
+    setLastHighlightId(highlightId);
+    setTab("received");
+  }
+
   useEffect(() => {
     if (highlightId && highlightRef.current && !loading) {
       highlightRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
     }
   }, [highlightId, loading, rows]);
 
+  const { received, sent, accepted, history } = useMemo(
+    () => categorizeExchanges(rows, user?.id),
+    [rows, user?.id]
+  );
+
+  const counts = { received: received.length, sent: sent.length, accepted: accepted.length, history: history.length };
+
+  const lists = { received, sent, accepted, history };
+  const currentList = lists[tab] ?? received;
+  const currentVariant = tab === "history" ? "active" : tab;
+
+  const updateStatus = async (exchange, status) => {
+    const id = exchange.id;
+    setBusyId(id);
+    setFeedback("");
+    try {
+      await apiFetch(`/api/exchanges/${encodeURIComponent(String(id))}/status`, {
+        method: "PATCH",
+        token,
+        body: { status },
+      });
+      await load();
+      if (status === "accepted") setTab("accepted");
+    } catch (e) {
+      setFeedback(e.message || "Action impossible.");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   return (
     <div className="w-full min-w-0">
-      <section className="dash-section mb-8 md:mb-10">
-        <h2 className="logo-text m-0 text-xl font-bold text-[var(--text-main)] sm:text-2xl md:text-3xl">Échanges</h2>
-        <p className="mb-0 mt-2 max-w-prose text-sm leading-relaxed text-[var(--text-muted)]">
-          Demandes persistées — grille 1 puis 2 colonnes à partir du grand écran type laptop.
-        </p>
+      <section className="mb-8 overflow-hidden rounded-2xl border-2 border-amber-500/25 bg-gradient-to-br from-amber-500/15 via-orange-500/10 to-[color-mix(in_srgb,var(--dash-card-bg)_92%,transparent)] p-5 shadow-[var(--shadow-soft)] sm:p-6 md:mb-10">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <p className="m-0 flex items-center gap-2.5 text-xs font-bold uppercase tracking-wider text-amber-700 dark:text-amber-300">
+              <span
+                className="inline-flex flex-none items-center justify-center rounded-lg bg-amber-500 text-white shadow-sm"
+                style={{ width: "2rem", height: "2rem" }}
+                aria-hidden
+              >
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                  <path d="M7 16V4m0 0L3 8m4-4 4 4M17 8v12m0 0 4-4m-4 4-4-4" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </span>
+              Mise en relation
+            </p>
+            <h2 className="logo-text m-0 mt-2 text-xl font-bold text-[var(--text-main)] sm:text-2xl md:text-3xl">
+              Échanges de compétences
+            </h2>
+            <p className="mb-0 mt-2 max-w-prose text-sm leading-relaxed text-[var(--text-muted)]">
+              Demandes, propositions et acceptations entre membres — distinct de la messagerie privée.
+              Utilisez <strong className="font-semibold text-[var(--text-main)]">Messages</strong> uniquement pour le chat.
+            </p>
+          </div>
+          <Link
+            to="/app/messages"
+            className="btn btn-ghost-light shrink-0 self-start text-center text-sm no-underline sm:self-center"
+          >
+            Aller aux conversations →
+          </Link>
+        </div>
       </section>
 
       {feedback ? (
-        <p className="message mb-6" role="status">
+        <p className="message mb-6 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2" role="status">
           {feedback}
         </p>
       ) : null}
 
+      <div
+        className="mb-6 flex flex-col gap-2 sm:flex-row sm:flex-wrap"
+        role="tablist"
+        aria-label="Sections des échanges"
+      >
+        {TABS.map((t) => {
+          const selected = tab === t.id;
+          const count = counts[t.id];
+          return (
+            <button
+              key={t.id}
+              type="button"
+              role="tab"
+              aria-selected={selected}
+              className={`flex min-h-11 flex-1 flex-col items-start rounded-xl border-2 px-4 py-3 text-left transition sm:min-w-[10rem] sm:flex-none ${
+                selected
+                  ? "border-amber-500 bg-amber-500/15 shadow-[var(--shadow-soft)]"
+                  : "border-[var(--dash-card-border)] bg-[color-mix(in_srgb,var(--grid-input-bg)_90%,transparent)] hover:border-amber-500/35"
+              }`}
+              onClick={() => setTab(t.id)}
+            >
+              <span className="flex w-full items-center justify-between gap-2">
+                <span className="text-sm font-bold text-[var(--text-main)]">{t.label}</span>
+                <span
+                  className={`inline-flex min-h-6 min-w-6 items-center justify-center rounded-full px-2 text-xs font-bold tabular-nums ${
+                    selected ? "bg-amber-500 text-white" : "bg-[var(--pill-bg)] text-[var(--text-muted)]"
+                  }`}
+                >
+                  {count}
+                </span>
+              </span>
+              <span className="mt-0.5 text-xs text-[var(--text-muted)]">{t.hint}</span>
+            </button>
+          );
+        })}
+      </div>
+
       {loading ? (
-        <p className="text-sm text-[var(--text-muted)]">Chargement…</p>
-      ) : rows.length === 0 ? (
-        <section className="dash-section flex flex-col items-center px-4 py-10 text-center">
-          <p className="mb-0 max-w-sm text-sm text-[var(--text-muted)]">
-            Aucune demande d&apos;échange enregistrée pour le moment.
+        <p className="text-sm text-[var(--text-muted)]">Chargement des demandes…</p>
+      ) : currentList.length === 0 ? (
+        <section className="flex flex-col items-center rounded-2xl border-2 border-dashed border-amber-500/30 bg-amber-500/5 px-4 py-12 text-center">
+          <p className="m-0 max-w-md text-sm text-[var(--text-muted)]">
+            {tab === "received"
+              ? "Aucune demande reçue. Explorez Accueil pour trouver des membres."
+              : tab === "sent"
+                ? "Vous n'avez pas encore envoyé de demande."
+                : tab === "accepted"
+                  ? "Aucun échange accepté pour le moment."
+                  : "Aucun échange terminé ou refusé dans l'historique."}
           </p>
-          <Link
-            to="/app/notifications"
-            className="btn btn-ghost-light mt-5 inline-block w-full max-w-xs text-center no-underline sm:w-auto"
-          >
-            Retour aux notifications
+          <Link to="/app" className="btn btn-primary mt-6 inline-block no-underline">
+            Explorer la communauté
           </Link>
         </section>
       ) : (
-        <ul className="m-0 grid w-full min-w-0 list-none grid-cols-1 gap-4 p-0 sm:gap-5 md:grid-cols-2">
-          {rows.map((ex) => {
+        <ul className="m-0 flex w-full min-w-0 list-none flex-col gap-5 p-0">
+          {currentList.map((ex) => {
             const id = String(ex.id);
             const hilite = highlightId && highlightId === id;
             return (
               <li key={id} ref={hilite ? highlightRef : undefined} className="min-w-0">
-                <article
-                  className={`flex h-full min-w-0 flex-col gap-3 rounded-xl border border-[var(--dash-card-border)] bg-[color-mix(in_srgb,var(--grid-input-bg)_92%,transparent)] p-4 shadow-[var(--shadow-soft)] sm:p-5 ${
-                    hilite ? "ring-2 ring-[var(--accent)]/45" : ""
-                  }`}
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="rounded-full border border-[var(--dash-card-border)] bg-[var(--pill-bg)] px-3 py-1 text-xs font-semibold text-[var(--text-muted)]">
-                      #{id}
-                    </span>
-                    <span className="text-xs font-medium text-[var(--accent)]">{statusLabel(ex.status)}</span>
-                  </div>
-                  <p className="m-0 text-sm text-[var(--text-muted)]">{formatRelativeTimeFr(ex.created_at)}</p>
-                  <dl className="m-0 grid gap-1 text-sm">
-                    <div className="flex flex-col gap-0.5 sm:flex-row sm:gap-2">
-                      <dt className="font-medium text-[var(--text-main)]">Proposant</dt>
-                      <dd className="m-0 min-w-0 text-[var(--text-muted)]">{ex.proposer_nom ?? "—"}</dd>
-                    </div>
-                    <div className="flex flex-col gap-0.5 sm:flex-row sm:gap-2">
-                      <dt className="font-medium text-[var(--text-main)]">Récepteur</dt>
-                      <dd className="m-0 min-w-0 text-[var(--text-muted)]">{ex.receiver_nom ?? "—"}</dd>
-                    </div>
-                  </dl>
-                  {ex.learning_objective ? (
-                    <p className="mb-0 mt-1 border-t border-[var(--dash-card-border)] pt-2 text-sm text-[var(--text-muted)]">
-                      <span className="font-semibold text-[var(--text-main)]">Objectif : </span>
-                      {ex.learning_objective}
-                    </p>
-                  ) : null}
-                </article>
+                <ExchangeRequestCard
+                  exchange={ex}
+                  currentUserId={user?.id}
+                  variant={currentVariant}
+                  highlighted={hilite}
+                  busy={busyId === ex.id}
+                  onAccept={(item) => void updateStatus(item, "accepted")}
+                  onReject={(item) => void updateStatus(item, "rejected")}
+                />
               </li>
             );
           })}
         </ul>
       )}
 
-      <Link
-        to="/app/notifications"
-        className="btn btn-ghost-light mt-8 inline-block w-full max-w-full text-center no-underline box-border sm:mt-10 sm:w-auto"
-      >
-        Retour aux notifications
-      </Link>
+      <TutoringHistorySection />
     </div>
   );
 }

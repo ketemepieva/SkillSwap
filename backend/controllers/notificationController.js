@@ -14,6 +14,15 @@ exports.list = async (req, res) => {
   }
 };
 
+exports.unreadCount = async (req, res) => {
+  try {
+    const count = await Notification.countUnread(req.user.id);
+    return res.json({ count });
+  } catch (error) {
+    return res.status(500).json({ message: "Erreur notifications" });
+  }
+};
+
 exports.markRead = async (req, res) => {
   try {
     const id = Number(req.params.id);

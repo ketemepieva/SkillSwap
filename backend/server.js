@@ -14,6 +14,8 @@ const recommendationRoutes = require("./routes/recommendationRoutes");
 const adminRoutes = require("./routes/adminRoutes");
 const messageRoutes = require("./routes/messageRoutes");
 const notificationRoutes = require("./routes/notificationRoutes");
+const tutoringRoutes = require("./routes/tutoringRoutes");
+const { startTutoringScheduler } = require("./services/tutoringScheduler");
 
 const app = express();
 app.disable("x-powered-by");
@@ -67,6 +69,7 @@ app.use("/api/recommendations", recommendationRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/messages", messageRoutes);
 app.use("/api/notifications", notificationRoutes);
+app.use("/api/tutoring", tutoringRoutes);
 
 /* Fallback 404 JSON (évite réponses HTML inattendues) */
 app.use((req, res) => {
@@ -99,6 +102,8 @@ app.use((err, req, res, _next) => {
 
 const PORT = Number(process.env.PORT || 5000);
 const HOST = process.env.HOST || "0.0.0.0";
+
+startTutoringScheduler();
 
 const server = app.listen(PORT, HOST, () => {
   console.log(`[SkillSwap API] Listening on http://${HOST}:${PORT}`);

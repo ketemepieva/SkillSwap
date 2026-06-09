@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { apiFetch } from "../api/client.js";
+import { isAuthPath, resolvePostAuthPath } from "../utils/authRedirect.js";
 import { AuthContext } from "./auth-context.js";
 
 export function AuthProvider({ children }) {
@@ -25,7 +26,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   useEffect(() => {
-    document.body.classList.toggle("auth-screen-dark", location.pathname === "/login");
+    document.body.classList.toggle("auth-screen-dark", isAuthPath(location.pathname));
     return () => document.body.classList.remove("auth-screen-dark");
   }, [location.pathname]);
 
@@ -67,10 +68,10 @@ export function AuthProvider({ children }) {
     async (credentials) => {
       const payload = await apiFetch("/api/login", { method: "POST", body: { email: credentials.email, password: credentials.password } });
       applySession(payload.token, payload.user);
-      navigate("/app", { replace: true });
+      navigate(resolvePostAuthPath(location.state?.from), { replace: true });
       return payload;
     },
-    [applySession, navigate]
+    [applySession, location.state, navigate]
   );
 
   const register = useCallback(
@@ -80,10 +81,10 @@ export function AuthProvider({ children }) {
         body: { nom: payload.nom, email: payload.email, password: payload.password },
       });
       applySession(result.token, result.user);
-      navigate("/app", { replace: true });
+      navigate(resolvePostAuthPath(location.state?.from), { replace: true });
       return result;
     },
-    [applySession, navigate]
+    [applySession, location.state, navigate]
   );
 
   const logout = useCallback(async () => {

@@ -1,5 +1,8 @@
 const db = require("../config/db");
 const Notification = require("../models/notificationModel");
+const { avatarPublicPath } = require("../utils/avatarPublicUrl");
+
+const ALLOWED_STATUSES = new Set(["accepted", "rejected", "completed"]);
 
 exports.createExchange = async (req, res) => {
   try {
@@ -50,12 +53,32 @@ exports.createExchange = async (req, res) => {
 exports.updateExchangeStatus = async (req, res) => {
   try {
     const { status } = req.body;
-    await db.execute("UPDATE exchanges SET status = ? WHERE id = ? AND receiver_id = ?", [
-      status,
-      req.params.id,
-      req.user.id,
-    ]);
-    return res.json({ message: "Statut mis a jour" });
+    const next = String(status || "").toLowerCase();
+    if (!ALLOWED_STATUSES.has(next)) {
+      return res.status(400).json({ message: "Statut invalide (accepted, rejected, completed)." });
+    }
+    const [result] = await db.execute(
+      "UPDATE exchanges SET status = ? WHERE id = ? AND receiver_id = ? AND status = 'pending'",
+      [next, req.params.id, req.user.id]
+    );
+    if (!result?.affectedRows) {
+      return res.status(404).json({ message: "Demande introuvable ou deja traitee." });
+    }
+    const [rows] = await db.execute("SELECT proposer_id, id FROM exchanges WHERE id = ?", [req.params.id]);
+    const row = rows[0];
+    if (row?.proposer_id) {
+      try {
+        await Notification.insert({
+          user_id: row.proposer_id,
+          type: "exchange_request",
+          related_user_id: req.user.id,
+          target_id: String(row.id),
+        });
+      } catch (e) {
+        console.warn("[exchange/status] notification:", e.message);
+      }
+    }
+    return res.json({ message: "Statut mis a jour", status: next });
   } catch (error) {
     return res.status(500).json({ message: "Erreur mise a jour echange" });
   }
@@ -64,15 +87,28 @@ exports.updateExchangeStatus = async (req, res) => {
 exports.listMyExchanges = async (req, res) => {
   try {
     const [rows] = await db.execute(
-      `SELECT e.*, p.nom AS proposer_nom, r.nom AS receiver_nom
+      `SELECT e.*,
+              p.nom AS proposer_nom,
+              r.nom AS receiver_nom,
+              p.avatar_filename AS proposer_avatar_filename,
+              r.avatar_filename AS receiver_avatar_filename,
+              os.nom_competence AS offered_skill_name,
+              rs.nom_competence AS requested_skill_name
        FROM exchanges e
        JOIN users p ON p.id = e.proposer_id
        JOIN users r ON r.id = e.receiver_id
+       JOIN skills os ON os.id = e.offered_skill_id
+       JOIN skills rs ON rs.id = e.requested_skill_id
        WHERE e.proposer_id = ? OR e.receiver_id = ?
        ORDER BY e.created_at DESC`,
       [req.user.id, req.user.id]
     );
-    return res.json(rows);
+    const mapped = rows.map((row) => ({
+      ...row,
+      proposer_avatar_url: avatarPublicPath(row.proposer_avatar_filename),
+      receiver_avatar_url: avatarPublicPath(row.receiver_avatar_filename),
+    }));
+    return res.json(mapped);
   } catch (error) {
     return res.status(500).json({ message: "Erreur lecture echanges" });
   }

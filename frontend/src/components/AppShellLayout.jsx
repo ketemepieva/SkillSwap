@@ -4,6 +4,7 @@ import { ThemeToggle } from "./ThemeToggle.jsx";
 import { Avatar } from "./Avatar.jsx";
 import { Logo } from "./Logo.jsx";
 import { useAuth } from "../hooks/useAuth.js";
+import { useNotifications } from "../hooks/useNotifications.js";
 
 const pill = ({ isActive }) =>
   [
@@ -73,11 +74,33 @@ function IconBell({ className }) {
   );
 }
 
+/** Badge numéroté des notifications non lues (affiche « 9+ » au-delà).
+ *  Dimensions verrouillées en inline style pour rester un petit rond
+ *  quel que soit le contexte flex/grid parent. */
+function UnreadBadge({ count, className = "" }) {
+  if (!count) return null;
+  return (
+    <span
+      className={`inline-flex flex-none items-center justify-center rounded-full bg-red-500/90 font-semibold text-white ${className}`}
+      style={{
+        height: "1rem",
+        minWidth: "1rem",
+        maxWidth: "max-content",
+        padding: "0 0.28rem",
+        fontSize: "0.6rem",
+        lineHeight: 1,
+      }}
+      aria-label={`${count} notification${count > 1 ? "s" : ""} non lue${count > 1 ? "s" : ""}`}
+    >
+      {count > 9 ? "9+" : count}
+    </span>
+  );
+}
+
 /** Navigation desktop (toutes les sections, y compris Profil). */
 const desktopNavLinks = [
   { to: "/app", end: true, label: "Accueil" },
-  { to: "/app/dashboard", label: "Tableau de bord" },
-  { to: "/app/profil", label: "Profil" },
+  { to: "/app/dashboard", label: "Mon espace" },
   { to: "/app/echanges", label: "Échanges" },
   { to: "/app/messages", label: "Messages" },
   { to: "/app/notifications", label: "Notifications" },
@@ -86,7 +109,7 @@ const desktopNavLinks = [
 /** Barre inférieure mobile — accès rapide sans ouvrir le menu compte. */
 const mobileBottomNav = [
   { to: "/app", end: true, label: "Accueil", Icon: IconHome },
-  { to: "/app/dashboard", end: false, label: "Dashboard", Icon: IconDashboard },
+  { to: "/app/dashboard", end: false, label: "Mon espace", Icon: IconDashboard },
   { to: "/app/messages", end: false, label: "Messages", Icon: IconMessages },
   { to: "/app/echanges", end: false, label: "Échanges", Icon: IconExchange },
   { to: "/app/notifications", end: false, label: "Notifs", Icon: IconBell },
@@ -94,6 +117,7 @@ const mobileBottomNav = [
 
 export function AppShellLayout() {
   const { user, logout } = useAuth();
+  const { unreadCount } = useNotifications();
   const location = useLocation();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const parametresBase = "/app/parametres";
@@ -120,7 +144,7 @@ export function AppShellLayout() {
   return (
     <div className="app-shell-wrapper min-h-screen min-w-0 overflow-x-hidden bg-transparent">
       {/* Espace pour la bottom nav mobile (safe area inclus) */}
-      <div className="app-shell mx-auto w-full max-w-6xl min-w-0 box-border px-4 pb-[calc(4.25rem+env(safe-area-inset-bottom,0px))] pt-6 sm:px-5 sm:pb-8 sm:pt-8 md:px-6 md:pb-10 md:pt-10 lg:py-10">
+      <div className="app-shell mx-auto w-full max-w-6xl min-w-0 box-border px-5 pb-[calc(4.25rem+env(safe-area-inset-bottom,0px))] pt-6 sm:px-7 sm:pb-8 sm:pt-8 md:px-9 md:pb-10 md:pt-10 lg:px-10 lg:py-12">
         <header className="mb-8 border-b border-[var(--dash-card-border)] pb-6 md:mb-10">
           <div className="flex min-w-0 items-center justify-between gap-3 md:gap-6">
             <div className="flex min-w-0 max-w-[min(100%,82%)] shrink flex-col md:max-w-none">
@@ -162,7 +186,14 @@ export function AppShellLayout() {
         >
           {desktopNavLinks.map(({ to, end, label }) => (
             <NavLink key={to + String(Boolean(end))} to={to} end={end} className={pill}>
-              {label}
+              {to === "/app/notifications" && unreadCount > 0 ? (
+                <span className="inline-flex items-center gap-1.5">
+                  {label}
+                  <UnreadBadge count={unreadCount} />
+                </span>
+              ) : (
+                label
+              )}
             </NavLink>
           ))}
         </nav>
@@ -191,13 +222,16 @@ export function AppShellLayout() {
                     <>
                       <span
                         className={[
-                          "grid size-9 shrink-0 place-items-center rounded-xl motion-safe:transition-[background-color,box-shadow] motion-safe:duration-200",
+                          "relative grid size-9 shrink-0 place-items-center rounded-xl motion-safe:transition-[background-color,box-shadow] motion-safe:duration-200",
                           isActive
                             ? "bg-[var(--tab-active-bg)] text-[var(--tab-active-fg)] shadow-[var(--shadow-soft)]"
                             : "bg-transparent text-current",
                         ].join(" ")}
                       >
                         <Icon className="shrink-0" />
+                        {to === "/app/notifications" ? (
+                          <UnreadBadge count={unreadCount} className="absolute -right-1.5 -top-1" />
+                        ) : null}
                       </span>
                       <span className="line-clamp-2 max-w-full text-center">{label}</span>
                     </>

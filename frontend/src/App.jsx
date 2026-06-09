@@ -1,6 +1,7 @@
-import { Navigate, Route, Routes, useParams } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
 import { ProtectedRoute } from "./components/ProtectedRoute.jsx";
 import { AppShellLayout } from "./components/AppShellLayout.jsx";
+import { NotificationsProvider } from "./context/NotificationsContext.jsx";
 import { useAuth } from "./hooks/useAuth.js";
 import { AuthPage } from "./pages/AuthPage.jsx";
 import { DashboardPage } from "./pages/DashboardPage.jsx";
@@ -11,7 +12,6 @@ import { MessagesPage } from "./pages/MessagesPage.jsx";
 import { NotificationsPage } from "./pages/NotificationsPage.jsx";
 import { UserProfilePage } from "./pages/UserProfilePage.jsx";
 import { ExchangesPage } from "./pages/ExchangesPage.jsx";
-import { MessageThreadPage } from "./pages/MessageThreadPage.jsx";
 import { SettingsPage } from "./pages/SettingsPage.jsx";
 
 function RedirectToAppProfile() {
@@ -28,8 +28,9 @@ function RedirectToAppEchanges() {
   return <Navigate to="/app/echanges" replace />;
 }
 
-function LoginRoute() {
+function AuthRoute({ initialMode }) {
   const { user, ready } = useAuth();
+  const location = useLocation();
 
   if (!ready) {
     return (
@@ -40,17 +41,20 @@ function LoginRoute() {
   }
 
   if (user) {
-    return <Navigate to="/app" replace />;
+    const from = location.state?.from;
+    const target = typeof from === "string" && from.startsWith("/app") ? from : "/app/dashboard";
+    return <Navigate to={target} replace />;
   }
 
-  return <AuthPage />;
+  return <AuthPage initialMode={initialMode} />;
 }
 
 export default function App() {
   return (
     <Routes>
       <Route path="/" element={<LandingPage />} />
-      <Route path="/login" element={<LoginRoute />} />
+      <Route path="/login" element={<AuthRoute initialMode="login" />} />
+      <Route path="/inscription" element={<AuthRoute initialMode="register" />} />
       {/* Alias hors /app — même écran une fois connecté */}
       <Route path="/profile/:userId" element={<RedirectToAppProfile />} />
       <Route path="/echanges" element={<RedirectToAppEchanges />} />
@@ -59,14 +63,16 @@ export default function App() {
         path="/app"
         element={
           <ProtectedRoute>
-            <AppShellLayout />
+            <NotificationsProvider>
+              <AppShellLayout />
+            </NotificationsProvider>
           </ProtectedRoute>
         }
       >
         <Route index element={<PlatformHomePage />} />
         <Route path="dashboard" element={<DashboardPage />} />
         <Route path="profil" element={<MyProfilePage />} />
-        <Route path="messages/:conversationId" element={<MessageThreadPage />} />
+        <Route path="messages/:conversationId" element={<MessagesPage />} />
         <Route path="messages" element={<MessagesPage />} />
         <Route path="profile/:userId" element={<UserProfilePage />} />
         <Route path="echanges" element={<ExchangesPage />} />

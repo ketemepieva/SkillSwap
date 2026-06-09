@@ -25,6 +25,14 @@ const Notification = {
     return rows;
   },
 
+  countUnread: async (userId) => {
+    const [rows] = await db.execute(
+      "SELECT COUNT(*) AS count FROM notifications WHERE user_id = ? AND read = 0",
+      [userId]
+    );
+    return Number(rows?.[0]?.count) || 0;
+  },
+
   markRead: async (notificationId, ownerUserId) => {
     const [r] = await db.execute(
       "UPDATE notifications SET read = 1 WHERE id = ? AND user_id = ?",

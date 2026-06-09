@@ -41,7 +41,7 @@ export function AvailableExchangesSection({ filter }) {
       navigate("/login", { state: { from: "/", highlight: exchange.id } });
       return;
     }
-    navigate("/app");
+    navigate("/app/dashboard");
   };
 
   return (
